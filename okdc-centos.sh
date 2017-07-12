@@ -16,12 +16,12 @@ REPO=${REPO:-https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el$OS_VE
 REGISTRY_PREFIX=${REGISTRY_PREFIX:-registry.aliyuncs.com/archon}
 DOCKER_MIRROR=${DOCKER_MIRROR:-$(python -c 'import json; d=json.load(open("/etc/docker/daemon.json")); print d.get("registry-mirrors",[])[0]' 2>/dev/null)}
 DOCKER_MIRROR=${DOCKER_MIRROR:-https://mirror.ccs.tencentyun.com}
-K8S_VERSION=${K8S_VERSION:-v1.6.2}
+K8S_VERSION=${K8S_VERSION:-v1.7.0}
 PAUSE_IMG=${PAUSE_IMG:-$REGISTRY_PREFIX/pause-amd64:3.0}
 HYPERKUBE_IMG=${HYPERKUBE_IMG:-$REGISTRY_PREFIX/hyperkube-amd64:$K8S_VERSION}
 ETCD_IMG=${ETCD_IMG:-$REGISTRY_PREFIX/etcd:3.0.17}
 KUBE_ALIYUN_IMG=${KUBE_ALIYUN_IMG:-registry.aliyuncs.com/kubeup/kube-aliyun}
-POD_IP_RANGE=${POD_IP_RANGE:-10.244.0.0/16}
+POD_IP_RANGE=${POD_IP_RANGE:-192.168.0.0/16}
 TOKEN=${TOKEN:-$(python -c 'import random,string as s;t=lambda l:"".join(random.choice(s.ascii_lowercase + s.digits) for _ in range(l));print t(6)+"."+t(16)')}
 
 # Only required for node mode
@@ -80,9 +80,22 @@ install_calico_with_etcd() {
 		readtty -n1 -p "Your memory is not really enough for running k8s master with Calico. This will result in serious performance issues. Are you sure? (y/N) " INPUT
 		[ "$INPUT" != "y" ] && echo "Abort" && exit 3
 	fi
-	wget -O /tmp/calico.yaml http://docs.projectcalico.org/v2.1/getting-started/kubernetes/installation/hosted/kubeadm/1.6/calico.yaml
+	wget -O /tmp/calico.yaml http://docs.projectcalico.org/v2.3/getting-started/kubernetes/installation/hosted/kubeadm/1.6/calico.yaml
 	sed -i "s,gcr\.io/google_containers/etcd:2\.2\.1,$ETCD_IMG,g" /tmp/calico.yaml
 	sed -i "s,quay\.io/,,g" /tmp/calico.yaml
+	kubectl --kubeconfig=$ADMIN_CONF apply -f /tmp/calico.yaml
+}
+
+install_calico_with_kdd() {
+	[ -z "$DOCKER_MIRROR" ] && echo "Can't install Calico without a docker mirror. Abort" && exit 3
+	if [ $MEM -lt 1500000 ]; then
+		readtty -n1 -p "Your memory is not really enough for running k8s master with Calico. This will result in serious performance issues. Are you sure? (y/N) " INPUT
+		[ "$INPUT" != "y" ] && echo "Abort" && exit 3
+	fi
+	wget -O /tmp/calico.yaml http://docs.projectcalico.org/v2.3/getting-started/kubernetes/installation/hosted/kubernetes-datastore/calico-networking/1.6/calico.yaml
+	sed -i "s,gcr\.io/google_containers/etcd:2\.2\.1,$ETCD_IMG,g" /tmp/calico.yaml
+	sed -i "s,quay\.io/,,g" /tmp/calico.yaml
+	kubectl --kubeconfig=$ADMIN_CONF apply -f http://docs.projectcalico.org/master/getting-started/kubernetes/installation/hosted/rbac.yaml
 	kubectl --kubeconfig=$ADMIN_CONF apply -f /tmp/calico.yaml
 }
 
@@ -97,8 +110,9 @@ install_network() {
 	while :; do
 		echo "Available network layer:"
 		echo "1) Flannel"
-		echo "2) Calico (mem>1.5G && requires a docker mirror)"
-		echo "3) Skip "
+		echo "2) Calico with etcd (mem>1.5G && requires a docker mirror)"
+		echo "3) Calico with kubernetes datastore (mem>1.5G && requires a docker mirror)"
+		echo "4) Skip "
 		readtty -n1 -p "Choose one to install: " INPUT
 		case $INPUT in
 			1)
@@ -108,6 +122,9 @@ install_network() {
 				install_calico_with_etcd
 				;;
 			3)
+				install_calico_with_kdd
+				;;
+			4)
 				echo -e "\nSkipped."
 				;;
 			*)
@@ -184,7 +201,7 @@ update_kubelet() {
 	Wants=flexv.service
 	After=flexv.service
 	[Service]
-	Environment="KUBELET_NETWORK_ARGS=--network-plugin=kubenet"
+	Environment="KUBELET_NETWORK_ARGS=--network-plugin=cni"
 	Environment="KUBELET_EXTRA_ARGS=--pod-infra-container-image=$PAUSE_IMG --cgroup-driver=systemd"
 	END
 	chmod +x $KUBELET_DROPLET
@@ -285,7 +302,7 @@ check_node_prerequisite() {
 run_master() {
 	intro
 
-  check_env
+	check_env
 	pause
 
 	update_yum
@@ -295,29 +312,29 @@ run_master() {
 	update_bridge
 	run_kubeadm
 	patch_kubelet
-  restart_kubelet
+	restart_kubelet
 	install_network
 	
 	show_node_cmd
-  echo "Done"
+	echo "Done"
 }
 
 run_node() {
 	intro
 
-  check_env
-  check_node_prerequisite
+	check_env
+	check_node_prerequisite
 	pause
 
 	update_yum
 	set_accelerator
 	update_kubelet
-  patch_kubelet
+	patch_kubelet
 	enable_services
 	update_bridge
 	run_kubeadm_node
 	
-  echo "Done"
+	echo "Done"
 }
 
 if [ -n "$MASTER" ]; then
