@@ -283,7 +283,6 @@ set_accelerator() {
 
 run_kubeadm() {
 	# Kubeadm config
-	# https://kubernetes.io/docs/admin/kubeadm/#config-file
 	cat >/tmp/kubeadm.conf <<-END
 	apiVersion: kubeadm.k8s.io/v1alpha1
 	kind: MasterConfiguration
