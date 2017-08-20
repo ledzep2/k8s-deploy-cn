@@ -101,7 +101,7 @@ install_calico_with_etcd() {
 		NOINPUT_DEFAULT=y readtty -n1 -p "Your memory is not really enough for running k8s master with Calico. This will result in serious performance issues. Are you sure? (y/N) " INPUT
 		[ "$INPUT" != "y" ] && echo "Abort" && exit 3
 	fi
-	wget -O /tmp/calico.yaml http://docs.projectcalico.org/v2.3/getting-started/kubernetes/installation/hosted/kubeadm/1.6/calico.yaml
+	wget -O /tmp/calico.yaml http://docs.projectcalico.org/v2.4/getting-started/kubernetes/installation/hosted/kubeadm/1.6/calico.yaml
 	sed -i "s,gcr\.io/google_containers/etcd:2\.2\.1,$ETCD_IMG,g" /tmp/calico.yaml
 	sed -i "s,quay\.io/,,g" /tmp/calico.yaml
 	kubectl --kubeconfig=$ADMIN_CONF apply -f /tmp/calico.yaml
@@ -111,13 +111,13 @@ install_calico_with_etcd() {
 install_calico_with_kdd() {
 	[ -z "$DOCKER_MIRROR" ] && echo "Can't install Calico without a docker mirror. Abort" && exit 3
 	if [ $MEM -lt 1500000 ]; then
-		readtty -n1 -p "Your memory is not really enough for running k8s master with Calico. This will result in serious performance issues. Are you sure? (y/N) " INPUT
+		NOINPUT_DEFAULT=y readtty -n1 -p "Your memory is not really enough for running k8s master with Calico. This will result in serious performance issues. Are you sure? (y/N) " INPUT
 		[ "$INPUT" != "y" ] && echo "Abort" && exit 3
 	fi
-	wget -O /tmp/calico.yaml http://docs.projectcalico.org/v2.3/getting-started/kubernetes/installation/hosted/kubernetes-datastore/calico-networking/1.6/calico.yaml
+	wget -O /tmp/calico.yaml http://docs.projectcalico.org/v2.4/getting-started/kubernetes/installation/hosted/kubernetes-datastore/calico-networking/1.6/calico.yaml
 	sed -i "s,gcr\.io/google_containers/etcd:2\.2\.1,$ETCD_IMG,g" /tmp/calico.yaml
 	sed -i "s,quay\.io/,,g" /tmp/calico.yaml
-	kubectl --kubeconfig=$ADMIN_CONF apply -f http://docs.projectcalico.org/master/getting-started/kubernetes/installation/hosted/rbac.yaml
+	kubectl --kubeconfig=$ADMIN_CONF apply -f https://docs.projectcalico.org/v2.4/getting-started/kubernetes/installation/hosted/rbac-kdd.yaml
 	kubectl --kubeconfig=$ADMIN_CONF apply -f /tmp/calico.yaml
 }
 
@@ -140,6 +140,9 @@ install_network() {
 				;;
 			calico)
 				install_calico_with_etcd
+				;;
+			calico_kdd)
+				install_calico_with_kdd
 				;;
 			*)
 				echo -e "Bad network $NETWORK. Will skip"
@@ -283,7 +286,6 @@ set_accelerator() {
 
 run_kubeadm() {
 	# Kubeadm config
-	# https://kubernetes.io/docs/admin/kubeadm/#config-file
 	cat >/tmp/kubeadm.conf <<-END
 	apiVersion: kubeadm.k8s.io/v1alpha1
 	kind: MasterConfiguration
