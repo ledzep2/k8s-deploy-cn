@@ -141,6 +141,9 @@ install_network() {
 			calico)
 				install_calico_with_etcd
 				;;
+			calico_kdd)
+				install_calico_with_kdd
+				;;
 			*)
 				echo -e "Bad network $NETWORK. Will skip"
 				;;
